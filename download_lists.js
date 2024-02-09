@@ -1,59 +1,46 @@
-import { existsSync } from "node:fs";
-import { unlink } from "node:fs/promises";
-import { resolve } from "node:path";
+import { existsSync, mkdirSync, statSync } from 'fs'
+import { unlink } from 'fs/promises'
+import { resolve } from 'path'
 
-import {
-  LIST_TYPE,
-  PROCESSING_FILENAME,
-  RECOMMENDED_ALLOWLIST_URLS,
-  RECOMMENDED_BLOCKLIST_URLS,
-  USER_DEFINED_ALLOWLIST_URLS,
-  USER_DEFINED_BLOCKLIST_URLS,
-} from "./lib/constants.js";
-import { downloadFiles } from "./lib/utils.js";
-
-const allowlistUrls = USER_DEFINED_ALLOWLIST_URLS || RECOMMENDED_ALLOWLIST_URLS;
-const blocklistUrls = USER_DEFINED_BLOCKLIST_URLS || RECOMMENDED_BLOCKLIST_URLS;
-const listType = process.argv[2];
+import { PROCESSING_FILENAME, ALLOW_LIST, BLOCK_LIST } from './config/constants.js'
+import { downloadFiles } from './components/utils.js'
+import { logger } from './services/logger.js'
 
 const downloadLists = async (filename, urls) => {
-  const filePath = resolve(`./${filename}`);
+  const filePath = resolve(`./downloads/${filename}`)
+
+  if (!isValidDir('downloads')) {
+    logger.info('Creating download files directory')
+    mkdirSync('downloads')
+  }
 
   if (existsSync(filePath)) {
-    await unlink(filePath);
+    await unlink(filePath)
   }
 
   try {
-    await downloadFiles(filePath, urls);
+    await downloadFiles(filePath, urls)
 
-    console.log(
-      `Done. The ${filename} file contains merged data from the following list(s):`
-    );
-    console.log(
-      urls.reduce(
-        (previous, current, index) => previous + `${index + 1}. ${current}\n`,
-        ""
-      )
-    );
+    logger.info(`Done. The ${filename} file contains merged data from the following list(s):`)
+    logger.info(
+      urls.reduce((previous, current, index) => previous + `${index + 1}. ${current}`, '')
+    )
   } catch (err) {
-    console.error(`An error occurred while processing ${filename}:\n`, err);
-    console.error("URLs:\n", urls);
-    throw err;
+    logger.error(`An error occurred while processing ${filename}: %s`, err)
+    logger.error('URLs: %s', urls)
+    throw err
   }
-};
-
-switch (listType) {
-  case LIST_TYPE.ALLOWLIST: {
-    await downloadLists(PROCESSING_FILENAME.ALLOWLIST, allowlistUrls);
-    break;
-  }
-  case LIST_TYPE.BLOCKLIST: {
-    await downloadLists(PROCESSING_FILENAME.BLOCKLIST, blocklistUrls);
-    break;
-  }
-  default:
-    await Promise.all([
-      downloadLists(PROCESSING_FILENAME.ALLOWLIST, allowlistUrls),
-      downloadLists(PROCESSING_FILENAME.BLOCKLIST, blocklistUrls),
-    ]);
 }
+
+export function isValidDir(path) {
+  try {
+    return statSync(path).isDirectory()
+  } catch (e) {
+    return false
+  }
+}
+
+await Promise.all([
+  downloadLists(PROCESSING_FILENAME.ALLOWLIST, ALLOW_LIST),
+  downloadLists(PROCESSING_FILENAME.BLOCKLIST, BLOCK_LIST),
+])

@@ -1,44 +1,26 @@
-import {
-  deleteZeroTrustListsAtOnce,
-  deleteZeroTrustListsOneByOne,
-  getZeroTrustLists,
-} from "./lib/api.js";
-import { FAST_MODE } from "./lib/constants.js";
-import { notifyWebhook } from "./lib/helpers.js";
+import { deleteZeroTrustListsOneByOne, getZeroTrustLists } from './components/api.js'
+import { logger } from './services/logger.js'
 
-(async () => {
-  const { result: lists } = await getZeroTrustLists();
+logger.info('Starting remove filters')
 
-  if (!lists) {
-    console.warn(
-      "No file lists found - this is not an issue if it's your first time running this script. Exiting."
-    );
-    return;
-  }
+const { result } = await getZeroTrustLists()
 
-  const cgpsLists = lists.filter(({ name }) => name.startsWith("CGPS List"));
+if (result) {
+  const removeLists = result.filter(({ name }) => name.startsWith('BlockList'))
 
-  if (!cgpsLists.length) {
-    console.warn(
+  if (removeLists.length) {
+    logger.info(
+      `Got ${result.length} lists, ${removeLists.length} of which are lists that will be deleted.`
+    )
+
+    logger.info(`Deleting ${removeLists.length} lists...`)
+
+    await deleteZeroTrustListsOneByOne(removeLists)
+  } else {
+    logger.warn(
       "No lists with matching name found - this is not an issue if you haven't created any filter lists before. Exiting."
-    );
-    return;
+    )
   }
-
-  console.log(
-    `Got ${lists.length} lists, ${cgpsLists.length} of which are CGPS lists that will be deleted.`
-  );
-
-  console.log(`Deleting ${cgpsLists.length} lists...`);
-
-  if (FAST_MODE) {
-    await deleteZeroTrustListsAtOnce(cgpsLists);
-    // TODO: make this less repetitive
-    await notifyWebhook(`CF List Delete script finished running (${cgpsLists.length} lists)`);
-    return;
-  }
-
-  await deleteZeroTrustListsOneByOne(cgpsLists);
-
-  await notifyWebhook(`CF List Delete script finished running (${cgpsLists.length} lists)`);
-})();
+} else {
+  logger.warn('No file lists found. Exiting.')
+}
